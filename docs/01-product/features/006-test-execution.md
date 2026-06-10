@@ -1,0 +1,64 @@
+# Feature: Test Execution
+
+## What it does
+
+Test Execution is the step-by-step process of working through the test cases in an active TestRun and recording a result for each one. The tester opens each test case, reads the steps and expected results, runs the test against the target build, and records the outcome (Passed, Failed, Blocked, etc.). They can add a comment, log execution time, link defects, and upload attachments — all within the execution view.
+
+## Who uses it
+
+| Role | Capabilities |
+|------|-------------|
+| **Admin** | Execute any test run; record and update results |
+| **Lead** | Execute test runs in their projects |
+| **Tester** | Execute assigned test runs; record and update results |
+| **Read Only** | Read-only — cannot record results |
+
+## Key behaviours
+
+- Entry point: `TestRunExecutionView` at `/test-runs/:id/execute`.
+- The view loads the run's own cases via `testResultsStore.fetchRunCasesWithResults(runId)` (→ `GET /test-runs/:id/cases`). This populates both the results array (with synthesised `no_run` rows for untouched cases) and a parallel `runCases: TestCaseWithResult[]` ref on the store. The list renders only cases that belong to the run — no more pulling every project case.
+- Cases are displayed in a **nested suite tree** (`SuiteCaseSection.vue`) that mirrors the project's suite hierarchy: each suite node is a collapsible header with its direct cases and recursive child suites; subtree total count shows on the header. Cases whose suite isn't in the tree fall into a trailing "Unassigned" bucket. Selecting a case opens the execution panel.
+- **Result statuses**: `Passed`, `Failed`, `Blocked`, `No Run` (wire value `no_run`). The full enum in `src/types/testResult.ts` is `"passed" | "failed" | "blocked" | "no_run"` — one "not-yet-run" bucket on the frontend. `TestRunProgress` no longer carries an `untested` field; if the backend sends it, `updateTestRunProgress` folds it into `no_run`.
+- Recording a result calls `updateTestResult(id, TestResultUpdate)` — partial updates are supported (only changed fields need to be sent).
+- Each status change appends an entry to the result's history (see `009-result-history.md`).
+- **Comments** support rich text via `RichTextEditor.vue`. A result also has a `message` field (plain text, for error messages or automated test output) and a `stack_trace` field (for failed automated tests).
+- **Execution time**: the `execution_time` field on `TestResult` is nullable. The UI no longer captures or sends it (the manual stopwatch was removed in plan-049 as unreliable). The backend field remains for existing data and for future automation that records real durations.
+- **Defect linking**: see `007-defect-tracking.md` — handled via `DefectsPanel.vue` inside the execution view.
+- **Attachments**: see `008-attachments.md` — handled via `ImageUploadArea.vue` inside the execution view.
+- `TestResultsList.vue` and `TestResultCard.vue` render the results summary panel on `/test-runs/:id`. The list is populated from `GET /test-runs/:id/cases` (not `/test-results`), so every case in the run appears — cases without a real `TestResult` show as a synthesised `no_run` row with `id: null` (plan-055). Execution actions on a synthetic row route back to the execution view.
+- The `TestResultsList` panel also owns the run-level metadata: a `run-info-bar` tile shows Status tag, Created / Completed timestamps, a highlighted Pass Rate (via `formatPassRate`), the segmented `TestRunProgressBar`, a right-aligned `{passed}/{total}` summary, and clickable status-count chips under it. (The equivalent header-level stats block on `TestRunDetailView` was removed to consolidate state.) The list groups results under a recursive suite tree (`SuiteResultSection.vue`); each card also displays the suite name as a subtitle.
+- `TestResultDetail.vue` renders the selected case's detailed result form. For synthesised `no_run` rows (`id == null`) it hides the history/comment/attachment/defect tabs and renders a "not yet run" panel with an `Execute` button. When `suiteName` is provided by the parent, a Suite tile appears in the metadata grid alongside Type and Priority.
+- **Shared suite-tree view on detail + execute pages** (plan-068): both `/test-runs/:id` and `/test-runs/:id/execute` render the case list through one `<SuiteTreeResults>` component (`src/components/test-runs/SuiteTreeResults.vue` + recursive `SuiteTreeBranch.vue`). A `mode` prop drives row affordances — `read` mode uses result-card-style rows for the detail panel, `execute` mode uses compact picker rows with the status indicator circle. Suite headers carry total counts plus a compact passed/failed/blocked/no_run chip strip. Collapse state persists in `localStorage` under `testoria.suiteTree.collapsed[runId]` (trimmed at 50 runs), so the tester's expand/collapse state survives reloads and survives switching between the two pages for the same run. The execute view's "auto-advance to next untested" walks the tree in DFS render order via `SuiteTreeResults.findNextUntestedAfter` — stable across reloads, matching the order the user actually sees. The old `SuiteResultSection` / `SuiteCaseSection` / `TestResultCard` components are gone. Data still comes from the existing flat endpoints client-side; switching to api plan-034's grouped endpoint is tracked as follow-up work.
+- **Step statuses persist via Save** (plan-072): `commentPanelIsDirty` now includes a value-level comparison between `testResultsStore.stepResultsDraft[caseId]` and the loaded result's `step_results` (via a local `stepDraftDiffersFromResult` helper that sorts both sides by `index` and coerces null comments to ""). `saveComment()` includes `step_results: stepDraft.length > 0 ? stepDraft : undefined` in the payload — matching the full-submit path — so step statuses entered without choosing a full overall verdict still persist through `PUT /test-results/{id}`. The full-submit flow was already correct and is untouched.
+- **Planned → active on first submit** (plan-070): when the user submits a result on a `planned` run, `TestRunExecutionView.submitResult` calls `testRunsStore.setRunStatusOptimistic(runId, "active")` immediately so the status tag updates in the next render cycle; a follow-up `fetchTestRun` confirms the transition against the backend (api plan-039 auto-flips server-side on the first result write). If the optimistic update and server disagree, the server wins (single source of truth).
+- **Result-tag palette unified with row indicators** (plan-087, fixes TES-78): `StatusBadge` (`type="result"`) renders the four result statuses with explicit background + text colors that match the canonical `--status-*` tokens used by `SuiteTreeBranch`'s row dots and segment chips, instead of mapping to PrimeVue severities. Concretely: passed `#dcfce7 / #166534`, failed `#fee2e2 / #991b1b`, blocked `#4b5563 / #ffffff` (slate-600 + white — distinctly *not* warning-yellow), no_run `#f3f4f6 / #374151`. All four pairs verified WCAG AA. Other tag types (`priority`, `run`, `type`) continue to use PrimeVue severities — this change is scoped to result tags only. Dark-mode follow-ups bundled in the same plan: blocked badge gets an inset `rgba(255,255,255,0.18)` ring so the chip silhouette reads against the dark surface; `.stat.blocked` text on the execute view bumps from slate-600 to slate-400 (`#94a3b8`) for WCAG AA; `.verdict-btn--blocked` swaps from near-black `#1f2937` to slate-600 `#475569` with a subtle white border so the button outline is visible; the **Blocked** result-status card in `TestResultDetail.vue` (`.result-status-card.blocked`) drops its yellow tint in favour of a slate tint matching the badge — eliminates the "blocked card looks like passed card" confusion in the detail pane.
+- **Header Edit vs not-yet-run Execute in the detail pane** (plan-084, fixes TES-79): `TestResultDetail.vue` exposes two distinct emits — header pencil button emits `edit-test-case` (rendered only when `authStore.isProjectManager` is true, since `/test-cases/:id/edit` requires `minRole: lead`), and the not-yet-run panel's `Execute` button emits `execute-result`. `TestRunDetailView` routes them separately: `edit-test-case` → named-route push to `TestCaseEdit` (`/test-cases/:id/edit`); `execute-result` → `/test-runs/:id/execute?testCaseId=:id`. Both emits carry the full `TestResult` payload. Previously a single `edit` event sent both buttons through the same execute-route handler, so the header Edit button was redirecting to the in-run "Test cases list" instead of the editor.
+- **Comment edits from the detail panel persist** (plan-073): the Results & Comments panel in `TestResultDetail.vue` emits `update-comment` with `{ comment, images }`. `TestRunDetailView` handles that event by uploading any new images via `testResultsStore.uploadAttachment`, calling `testResultsStore.updateResult(resultId, { comment })`, and then refreshing the cases list so attachments surface. Success / error toasts fire only after the API call resolves; on error the edit panel stays open with the typed comment intact so the user can retry. The component itself is presentational — it only emits; the parent owns persistence, error handling, and toasts. An `is-saving` prop shows a loading state on the Save button; `resetCommentEdit` is exposed via `defineExpose` so the parent closes edit mode after a successful save.
+- **Progress bar** — segmented `TestRunProgressBar` showing Passed (green), Failed (red), Blocked (dark gray), No Run (light gray) as proportional slices of `total`. Counts are **backend-authoritative** via `GET /test-runs/{id}/progress` (fetched on mount and after each submitted result). The same component renders on both the detail page and the execution page.
+- **Empty run creation** — the create wizard (`TestRunCreateView`) accepts `include_test_cases: []` and lets users skip case selection entirely; the review step shows a hint that cases can be added later from the run detail page.
+- Each result embeds an optional `test_case` field (`TestResultTestCase`) with display metadata: title, type, priority, estimated time, automation ID, references, and labels. This avoids re-fetching the full TestCase during execution.
+- The run can be manually marked `Completed` or `Aborted` from the execution view toolbar.
+- **Per-step status picker (plan-047)**: each step in the selected test case displays four buttons — **P** (Passed), **F** (Failed), **B** (Blocked), **N** (No Run) — and an optional collapsible comment textarea. Step marks are stored in `testResultsStore.stepResultsDraft` (keyed by case ID) and persist across case navigation within the same execution session; switching to another case and back restores previously entered step statuses. Partial coverage is valid — not every step needs to be marked before submitting the overall result. When at least one step is marked, a **"Suggest overall status"** button appears: it derives a recommended overall status using `suggestOverallStatus` (any failed → Failed; else any blocked → Blocked; else all no_run → No Run; else all passed with full coverage → Passed; else default → No Run) and populates the overall status picker, but does **not** auto-submit. The step results are included in the `step_results` field of the submit payload (`TestResultCreate`). Empty or ambiguous input now defaults to `no_run` rather than leaving the suggestion null — so pressing submit without step marks records a `No Run` rather than a no-op.
+
+## Constraints / edge cases
+
+- Only the **assigned tester** and Admins/Leads can record results — read-only users see a read-only version of the execution view.
+- Navigating away mid-execution does not auto-save unsaved form state — the user should submit before leaving.
+- Results are per-run: re-running the same test suite creates new TestResults; the previous run's results are unaffected.
+- If every case has any result (including `no_run`), the run status does **not** automatically flip to `Completed` — the user must mark it manually.
+- Keyboard shortcut `4` in the execution view records `no_run` (previously `Skipped`).
+- Defect add/remove in the result detail triggers a full `fetchRunCasesWithResults` refetch after the PATCH succeeds, and `TestRunDetailView` watches the store's `results` to re-sync `selectedResult` to the fresh object.
+
+## Related docs
+
+- `docs/06-generated/api-schema.md` — `testResults` API endpoints
+- `docs/06-generated/routes-map.md` — `/test-runs/:id/execute`
+- `src/stores/testResults.ts`
+- `src/api/testResults.ts`
+- `src/views/test-runs/TestRunExecutionView.vue`
+- `src/components/test-runs/TestResultDetail.vue`
+- `src/components/test-runs/TestResultsList.vue`
+- `src/components/test-runs/TestResultCard.vue`
+- `docs/01-product/features/007-defect-tracking.md`
+- `docs/01-product/features/008-attachments.md`
+- `docs/01-product/features/009-result-history.md`
