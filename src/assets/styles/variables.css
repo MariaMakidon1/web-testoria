@@ -1,0 +1,57 @@
+/* CSS Variables - Testoria Theme */
+
+:root {
+  /* Primary Palette */
+  --primary-50: #eef0ff;
+  --primary-100: #e0e4ff;
+  --primary-200: #c7cdfe;
+  --primary-300: #a5aefc;
+  --primary-400: #8287f8;
+  --primary-500: #667eea;
+  --primary-600: #5a6fd6;
+  --primary-700: #4a5ab3;
+  --primary-800: #3d4a91;
+  --primary-900: #364174;
+
+  /* Gray Palette */
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+
+  /* Status Colors */
+  --green-50: #f0fdf4;
+  --green-500: #22c55e;
+  --green-600: #16a34a;
+
+  --yellow-50: #fffbeb;
+  --yellow-500: #f59e0b;
+  --yellow-600: #d97706;
+
+  --red-50: #fef2f2;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+
+  --blue-50: #eff6ff;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+
+  /* Test Result Status Colors */
+  --status-passed: #22c55e;
+  --status-failed: #ef4444;
+  --status-blocked: #4b5563;
+  --status-no-run: #9ca3af;
+  --status-retest: #8b5cf6;
+
+  /* Priority Colors */
+  --priority-critical: #dc2626;
+  --priority-high: #f97316;
+  --priority-medium: #eab308;
+  --priority-low: #22c55e;
+}

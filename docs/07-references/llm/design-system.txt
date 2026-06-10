@@ -1,0 +1,129 @@
+# DESIGN SYSTEM — Testoria Web Frontend
+# PrimeVue 4 component usage patterns and design tokens for this project.
+
+---
+
+## UI FRAMEWORK
+
+- PrimeVue 4 with @primevue/themes. Do not use any other component library.
+- Icons: PrimeIcons (`pi pi-<name>`). Use `primeicons` classes directly on `<i>` tags or via component icon props.
+- Theming: CSS variables defined in `src/assets/styles/variables.css`. Do not hardcode color values in component styles.
+
+---
+
+## CORE COMPONENTS TO USE (not raw HTML equivalents)
+
+| Use case           | PrimeVue component            |
+|--------------------|-------------------------------|
+| Data table         | `<DataTable>` + `<Column>`    |
+| Form input         | `<InputText>`, `<Textarea>`   |
+| Dropdown / select  | `<Select>` (was Dropdown)     |
+| Multi-select       | `<MultiSelect>`               |
+| Button             | `<Button>`                    |
+| Dialog / modal     | `<Dialog>`                    |
+| Toast notifications| `<Toast>` (via useToast)      |
+| Confirm dialog     | `<ConfirmDialog>` (see below) |
+| Tab panels         | `<TabView>` + `<TabPanel>`    |
+| Progress bar       | `<ProgressBar>`               |
+| Badge / chip       | `<Badge>`, `<Tag>`            |
+| Skeleton loader    | `<Skeleton>`                  |
+| Paginator          | `<Paginator>`                 |
+| Breadcrumb         | `<Breadcrumb>`                |
+| Menu               | `<Menu>`, `<TieredMenu>`      |
+| Panel / card       | `<Panel>`, `<Card>`           |
+| Splitter           | `<Splitter>` + `<SplitterPanel>` |
+| Checkbox           | `<Checkbox>`                  |
+| Radio              | `<RadioButton>`               |
+| Toggle             | `<ToggleButton>`, `<ToggleSwitch>` |
+| Date picker        | `<DatePicker>` (was Calendar) |
+| File upload        | `<FileUpload>`                |
+| Tooltip            | `v-tooltip` directive         |
+| Rich text          | `<RichTextEditor>` (internal, wraps Tiptap) |
+
+---
+
+## CUSTOM INTERNAL COMPONENTS (use these, do not re-implement)
+
+Located in `src/components/common/`:
+
+- `<DataTableWrapper>` — wraps PrimeVue DataTable with standard pagination, loading, and empty-state handling.
+- `<BulkActionsBar>` — action bar shown when rows are selected. Works with `useBulkOperations`.
+- `<FilterPanel>` — collapsible filter form. Emits `filter` event with filter values.
+- `<EmptyState>` — zero-state illustration + message + optional CTA button.
+- `<LoadingState>` — full-area skeleton / spinner. Use for initial data loads.
+- `<StatusBadge>` — colored badge for `ResultStatus`, `TestRunStatus`, `Priority`. Accepts `status` prop.
+- `<ConfirmDialog>` — internal confirm modal. Use instead of browser `confirm()`.
+- `<NotificationToast>` — bound to `stores/ui` notifications. Already mounted in `DefaultLayout`.
+- `<SavedFiltersDropdown>` — works with `stores/savedFilters`. Drop into any filterable list view.
+- `<RichTextEditor>` — Tiptap-based editor. Props: `modelValue` (HTML string), `placeholder`. Emits `update:modelValue`.
+- `<ImportExportDialog>` — modal for import/export flow. Uses `useImport` + `useExport` composables.
+- `<ImageUploadArea>` — drag-and-drop image uploader. Emits `upload` with File.
+- `<SkipLink>` — accessibility skip-to-content link. Already in `DefaultLayout`.
+
+---
+
+## BUTTON VARIANTS (PrimeVue `severity` prop)
+
+- Primary action: `<Button severity="primary">`  or no severity (default)
+- Destructive: `<Button severity="danger">`
+- Secondary / cancel: `<Button severity="secondary">`
+- Warning: `<Button severity="warning">`
+- Icon-only: `<Button icon="pi pi-trash" severity="danger" text rounded />`
+
+---
+
+## STATUS COLOR MAPPING
+
+Use the constants from `src/types/testResult.ts` and `src/types/testCase.ts` — do not hardcode.
+
+```
+ResultStatus colors (RESULT_STATUS_COLORS):
+  passed  → #22c55e (green)
+  failed  → #ef4444 (red)
+  blocked → #4b5563 (dark gray — halt state, not a warning)
+  no_run  → #9ca3af (light gray — explicit "no run" choice; default on empty submit). Label: "No Run"
+
+Priority colors (PRIORITY_COLORS):
+  critical→ #dc2626 (red-600)
+  high    → #f97316 (orange)
+  medium  → #eab308 (yellow)
+  low     → #22c55e (green)
+```
+
+---
+
+## LAYOUT
+
+- Authenticated views render inside `<DefaultLayout>` (sidebar + header).
+- `<AppSidebar>` contains main navigation. Visibility controlled by `stores/ui.sidebarVisible`.
+- `<AppHeader>` contains breadcrumb, user menu, and dark mode toggle.
+- Page content area starts below the header and to the right of the sidebar.
+- Do not set fixed heights on page content — let content scroll naturally.
+
+---
+
+## DARK MODE
+
+- `stores/ui.darkMode` controls dark mode. Toggled via `toggleDarkMode()`.
+- Dark class applied to `<html>` element: `document.documentElement.classList.toggle('dark', darkMode)`.
+- CSS variables in `variables.css` have dark overrides under `.dark {}`.
+- PrimeVue theme automatically responds to the dark class.
+
+---
+
+## SPACING AND TYPOGRAPHY
+
+- Use PrimeVue utility classes or Tailwind-compatible CSS variables where available.
+- Base font sizes, spacing, and border-radius defined as CSS custom properties in `variables.css`.
+- Avoid hardcoding `px` values inline — use variables or standard spacing scale.
+
+---
+
+## ACCESSIBILITY
+
+- Every interactive element needs a visible focus indicator (handled by `keyboard-user` class from `useAccessibility`).
+- Form inputs must have associated `<label>` elements or `aria-label`.
+- Icons used as standalone buttons need `aria-label` on the parent button.
+- Screen reader announcements: call `useAccessibility().announce(message)` for dynamic content changes.
+- Modal dialogs must trap focus — use `useAccessibility().createFocusTrap(containerEl)`.
+- `<SkipLink>` is already in the layout — point to `id="main-content"` on the main content container.

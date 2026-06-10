@@ -1,0 +1,106 @@
+# CODING STANDARDS — Testoria Web Frontend
+# TypeScript + Vue 3 standards enforced in this repo.
+
+---
+
+## TYPESCRIPT
+
+- Strict mode is on. No `any`. Use `unknown` + type narrowing or proper interfaces.
+- Prefer `interface` over `type` for object shapes. Use `type` for unions, aliases, enums.
+- All async functions return explicit Promise types.
+- All API functions are typed — inputs and outputs use types from `src/types/`.
+- Use `import type { ... }` for type-only imports.
+- Optional chaining (`?.`) and nullish coalescing (`??`) over manual null checks.
+- Avoid non-null assertions (`!`) except where the TypeScript compiler cannot infer safety and the value is guaranteed by a prior guard.
+
+---
+
+## VUE 3 COMPOSITION API
+
+- All components use `<script setup lang="ts">`. No Options API.
+- `defineProps` and `defineEmits` with TypeScript generics, not runtime declarations.
+- Reactive state: use `ref` for primitives, `reactive` for objects that logically change together.
+- Computed properties for any derived value — do not compute in the template.
+- Watchers: use `watch` with specific deps, not `watchEffect` unless the reactive deps are complex.
+- Lifecycle: `onMounted`/`onUnmounted` for DOM-dependent effects.
+
+---
+
+## COMPONENT STRUCTURE (order inside <script setup>)
+
+1. imports
+2. props / emits
+3. store injections
+4. local refs / reactive
+5. computed
+6. watchers
+7. functions
+8. lifecycle hooks
+
+---
+
+## TEMPLATE
+
+- No logic heavier than a ternary in template expressions — move to computed.
+- Use `v-bind` shorthand (`:prop`) and `v-on` shorthand (`@event`).
+- Keys on all `v-for` loops — use the item's `id` if available.
+- `v-if` and `v-for` never on the same element — wrap with `<template>`.
+- Prefer semantic HTML elements (`<button>`, `<nav>`, `<main>`) over generic `<div>`.
+- All interactive elements reachable by keyboard. Use `tabindex` and ARIA roles where native HTML is insufficient.
+
+---
+
+## STORES (Pinia)
+
+- Composition API style only: `defineStore('name', () => { ... return { ... } })`.
+- State: `ref` / `reactive` at the top.
+- Derived values: `computed`.
+- Actions: plain async functions.
+- Return object must be explicit — list every exported ref, computed, and function.
+- Loading state: every async action has a `loading` ref that is set true before the call and cleared in `finally`.
+- Error state: captured in a `ref<string | null>` called `error`, cleared at the start of each action.
+
+---
+
+## API FUNCTIONS
+
+- One file per domain under `src/api/`.
+- All calls use the named `apiClient` instance from `src/api/client.ts` — never raw `axios`.
+- Return the unwrapped data (`response.data`), not the Axios response object.
+- For multipart/form-data uploads, set `Content-Type: multipart/form-data` in the request config.
+
+---
+
+## IMPORTS
+
+- Path alias `@` maps to `src/`. Always use `@/` for cross-folder imports.
+- Group imports: external libs first, then `@/stores`, `@/api`, `@/composables`, `@/types`, `@/components`, relative.
+- No barrel re-exports from `src/types/index.ts` for new types — import the specific file.
+
+---
+
+## ERROR HANDLING
+
+- API errors bubble up to the store; stores catch and set `error.value`.
+- Components display `store.error` — they do not catch store action errors themselves (unless showing inline form errors).
+- Use `stores/notifications` (via `useUIStore.addNotification`) for toast feedback on success/failure.
+- Never swallow errors silently except in `stores/auth.logout()` (intentional — cleanup must always run).
+
+---
+
+## FORMATTING / LINTING
+
+- Prettier handles formatting — 2-space indent, single quotes, no semicolons (check .prettierrc if unsure).
+- ESLint with `@typescript-eslint` and `eslint-plugin-vue` — run `npm run lint` before committing.
+- `npm run format` for auto-formatting.
+- No unused imports, no unused variables.
+
+---
+
+## TESTING
+
+- Unit tests: Vitest + @vue/test-utils, placed alongside source in `__tests__/` or `.spec.ts` suffix.
+- E2E tests: Playwright under `tests/e2e/`.
+- Do not mock stores in unit tests — prefer testing the actual store logic with a real Pinia instance.
+- Mock API functions directly using `vi.mock('@/api/<domain>')` in unit tests.
+- Coverage: `npm run test:coverage`.

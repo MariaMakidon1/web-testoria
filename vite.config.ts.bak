@@ -1,0 +1,122 @@
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import path from 'path'
+
+// On-demand chunks that should never be preloaded on the initial page load.
+// These are loaded dynamically only when the user triggers an export/editor action.
+const ON_DEMAND_CHUNKS = ['excel', 'pdf', 'editor', 'charts']
+
+// Transitive dependencies of exceljs that are not needed on the initial page load.
+// Without this list they fall into the vendor catch-all and are preloaded on every page.
+const EXCEL_TRANSITIVE_DEPS = [
+  // exceljs direct deps
+  'archiver', 'archiver-utils', 'zip-stream', 'compress-commons',
+  'dayjs', 'fast-csv', '@fast-csv', 'jszip', 'readable-stream',
+  'saxes', 'xmlchars', 'tmp', 'unzipper', 'uuid',
+  // exceljs → canvg (SVG rendering in xlsx) and its own deps
+  'canvg', 'rgbcolor', 'stackblur-canvas', 'svg-pathdata', 'raf',
+  // canvg ships pre-transpiled code — route its polyfill helpers here too
+  'core-js', '@babel/runtime', 'regenerator-runtime',
+  // archiver chain (archiver → async, readdir-glob, tar-stream)
+  'async', 'tar-stream', 'readdir-glob', 'minimatch', 'lazystream', 'glob',
+  // tar-stream deps
+  'bl', 'end-of-stream', 'fs-constants',
+  // unzipper chain (unzipper → duplexer2, fstream, graceful-fs, listenercount, buffer-indexof-polyfill)
+  'big-integer', 'binary', 'bluebird', 'fstream', 'duplexer2',
+  'graceful-fs', 'listenercount', 'buffer-indexof-polyfill',
+  // binary chain
+  'chainsaw', 'buffers', 'traverse',
+  // jszip / readable-stream chain
+  'pako', 'lie', 'setimmediate', 'inherits', 'string_decoder', 'util-deprecate',
+  // misc
+  'buffer-crc32', 'normalize-path', 'pump', 'once', 'process-nextick-args',
+  'isarray', 'core-util-is', 'safe-buffer',
+]
+
+// Transitive dependencies of jspdf not covered by the 'jspdf' match above.
+const PDF_TRANSITIVE_DEPS = ['fflate', 'fast-png']
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      // Ensure pre-bundled deps target modern browsers to avoid legacy polyfills
+      target: 'esnext'
+    }
+  },
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      }
+    }
+  },
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    sourcemap: false,
+    chunkSizeWarningLimit: 600,
+    modulePreload: {
+      // Do not emit <link rel="modulepreload"> for on-demand chunks.
+      // They are fetched dynamically at the point of use, not on initial page load.
+      resolveDependencies: (_filename, deps) =>
+        deps.filter(dep => !ON_DEMAND_CHUNKS.some(name =>
+          dep.includes('/' + name + '-') || dep.includes('/' + name + '.')))
+    },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+
+          // Specific checks MUST come before the generic vue check.
+          // 'primevue', '@tiptap/vue-3', and 'vue-chartjs' all contain 'vue'
+          // in their path and would be falsely caught by a broad includes('vue').
+
+          // PrimeVue UI library
+          if (id.includes('primevue') || id.includes('@primevue') || id.includes('primeicons')) {
+            return 'primevue'
+          }
+          // TipTap editor (on-demand)
+          if (id.includes('@tiptap') || id.includes('prosemirror')) {
+            return 'editor'
+          }
+          // Charts (on-demand)
+          if (id.includes('chart.js') || id.includes('vue-chartjs')) {
+            return 'charts'
+          }
+          // Export libraries (on-demand) — match the package itself AND all its transitive deps
+          // so they never land in the preloaded vendor catch-all.
+          if (id.includes('exceljs') || id.includes('file-saver') ||
+              EXCEL_TRANSITIVE_DEPS.some(dep => id.includes('/' + dep + '/'))) {
+            return 'excel'
+          }
+          if (id.includes('jspdf') ||
+              PDF_TRANSITIVE_DEPS.some(dep => id.includes('/' + dep + '/'))) {
+            return 'pdf'
+          }
+          // Utilities
+          if (id.includes('lodash') || id.includes('date-fns')) {
+            return 'utils'
+          }
+          // HTTP client
+          if (id.includes('axios')) {
+            return 'axios'
+          }
+          // Vue core — use path-segment checks to avoid matching 'primevue' etc.
+          if (id.includes('/vue/') || id.includes('/@vue/') || id.includes('/pinia/') || id.includes('/vue-router/')) {
+            return 'vue-vendor'
+          }
+          // Other vendors
+          return 'vendor'
+        }
+      }
+    }
+  }
+})

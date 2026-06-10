@@ -1,0 +1,86 @@
+# FRONTEND RULES — Testoria Web
+# Rules an LLM must follow when writing or modifying code in this repo.
+# Read this before generating any Vue/TypeScript code.
+
+---
+
+## LAYER RULES (hard constraints)
+
+1. Components and views NEVER import from `src/api/`. Always go through a store.
+2. Stores import from `src/api/<domain>` — never call `apiClient` directly.
+3. `src/types/` has zero runtime deps. Nothing in types/ imports from stores, api, composables, or components.
+4. Cross-store reads use the composable-store pattern, not direct store imports inside another store.
+5. `api/client.ts` is the only file allowed to touch `localStorage` for Bearer tokens (read on every request). `stores/auth.ts` also reads/writes localStorage for tokens on login/logout — this dual-write is intentional; do not consolidate.
+
+---
+
+## ROUTER RULES
+
+9. Every authenticated route MUST carry `meta: { requiresAuth: true }`. The navigation guard enforces this. Never add a route without it.
+10. Only `/login` has `meta: { requiresAuth: false }`.
+11. Route components use lazy imports: `component: () => import('@/views/...')` — never static imports.
+
+---
+
+## AUTH / ROLES RULES
+
+12. Components read role flags from `stores/auth`: `isAdmin`, `isProjectManager`, `canManageTests`. Components NEVER read `user.role` directly.
+13. Role hierarchy: `admin` > `lead` > `tester` > `read_only` > `no_access`. `canManageTests` is true for admin + lead + tester.
+14. `isProjectManager` is true for admin AND lead (admin is a superset). Uses `ROLE_LEVELS` from `types/auth` for level-based checks.
+
+---
+
+## STORE RULES
+
+15. UI-only state (sidebar, modals, global loading, notifications) belongs in `stores/ui` — never in feature stores.
+16. Theme (dark/light) lives in `stores/ui` (darkMode ref + localStorage). Preferences store handles other display settings.
+17. All stores use the Pinia composition API style (`defineStore('name', () => { ... })`).
+
+---
+
+## COMPONENT RULES
+
+18. Views (`src/views/`) are thin: load data via store actions, delegate all UI to components. No business logic in views.
+19. `src/components/common/` components are generic and reusable — they must not import from domain-specific stores (test-cases, test-runs, etc.).
+20. `src/components/<domain>/` components are feature-specific and may import their domain store.
+21. Use PrimeVue components for all UI elements. Do not introduce a second UI library.
+
+---
+
+## TYPE RULES
+
+22. API response shapes use `PaginatedResponse<T>` (items, total, page, page_size, total_pages) and `ApiResponse<T>` (data, message?).
+23. Error responses are `ErrorResponse` (detail, status_code) or `ValidationErrorResponse` (detail: ValidationError[]).
+24. Use the existing enums/constants for enumerables: `PRIORITIES`, `TEST_CASE_TYPES`, `TEST_CASE_STATUSES`, `RESULT_STATUSES`, `TEST_RUN_STATUSES`. Use `PRIORITY_LABELS`, `TYPE_LABELS`, `STATUS_LABELS` for display text.
+
+---
+
+## COMPOSABLE RULES
+
+25. `useBulkOperations<T>` — generic; accepts items with `{ id: number | string }`. Use this whenever a list view needs multi-select + bulk actions.
+26. `useExport` — JSON/CSV/XML exports via browser download. For Excel use `useExcelExport`. For PDF use `usePdfExport`.
+27. `useImport` — JSON/CSV file parsing with validation and row transformation.
+28. `useAccessibility` — exposes `announce()`, `createFocusTrap()`, `skipToContent()`, `generateId()`. Mount in `App.vue` or layout components for global keyboard-user detection.
+
+---
+
+## NAMING CONVENTIONS
+
+29. Store files: `src/stores/<domain>.ts`, composable `use<Domain>Store`.
+30. API files: `src/api/<domain>.ts`.
+31. View files: `src/views/<domain>/<ViewName>View.vue`.
+32. Component files: `src/components/<domain>/<ComponentName>.vue`.
+33. Composable files: `src/composables/use<Name>.ts`, export `use<Name>()`.
+34. Type files: `src/types/<domain>.ts` — one domain per file.
+
+---
+
+## WHAT NOT TO DO
+
+- Do not add `console.log` statements to production code.
+- Do not use `any` — use proper TypeScript types or `unknown`.
+- Do not use `<style scoped>` with global overrides — use CSS variables from `src/assets/styles/variables.css`.
+- Do not use `setTimeout` for loading states — rely on store loading flags.
+- Do not duplicate state between a store and a component's local `ref` — pick one source of truth.
+- Do not call `window.location.href` for SPA navigation — use `router.push()`.
+  Exception: `api/client.ts` redirects to `/login` on failed token refresh (intentional hard redirect).
